@@ -1,5 +1,5 @@
 ---
-title: Hexo搭建个人博客
+title: Hexo搭建个人博客（一）
 date: 2018-10-15 16:46:14
 categories:
 - 其他
@@ -13,6 +13,28 @@ tags:
 
 ### 安装git
 在电脑上安装[Git客户端](https://git-scm.com/downloads)，并将Git与Github账号绑定。
+在命令行中设置user.name和user.email配置信息：
+```
+git config --global user.name "你的Github用户名"
+git config --global user.email "你的Github注册邮箱"
+```
+生成ssh密钥文件：
+```
+ssh-keygen -t rsa -C "你的Github注册邮箱"
+```
+默认不需要设置密码，直接回车即可。
+然后找到生成的.ssh文件夹中的id_rsa.pub密钥，将内容复制到Github的SSH Key中。
+在git Bash中检测Github公钥是否设置成功：
+```
+ssh git@github.com
+```
+如出现以下信息则说明设置成功：
+```
+PS D:\Work\MyBlog> ssh git@github.com
+PTY allocation request failed on channel 0
+Hi crystalww! You've successfully authenticated, but GitHub does not provide shell access.
+Connection to github.com closed.
+```
 
 ### 安装Node.js
 安装[Node.js](https://nodejs.org/en/download/)会默认安装npm。检测是否安装成功可分别输入：node -v 和 npm -v。
