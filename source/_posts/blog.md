@@ -1,5 +1,5 @@
 ---
-title: Hexo搭建个人博客（一）
+title: Hexo搭建个人博客
 date: 2018-10-15 16:46:14
 categories:
 - 其他
@@ -39,6 +39,9 @@ Connection to github.com closed.
 ### 安装Node.js
 安装[Node.js](https://nodejs.org/en/download/)会默认安装npm。检测是否安装成功可分别输入：node -v 和 npm -v。
 
+使用国内的源（比如淘宝NPM镜像）去替换官方的源以加快下载包的速度。<br>
+`npm config set registry http://registry.npm.taobao.org/`
+
 ### 安装Hexo
 ```
 npm install -g hexo-cli
@@ -52,6 +55,7 @@ hexo server 或 hexo s
 ```
 在本地浏览器打开：http://localhost:4000
 
+---
 
 ## 主题修改
 ### 下载主题
@@ -206,6 +210,52 @@ local_search:
 $ hexo clean
 $ hexo s -g
 ```
+
+#### 使用本地图片
+修改_config.yml
+```
+post_asset_folder: true
+```
+在站点的根目录下（MyBlog文件夹）执行：
+```
+npm install https://github.com/CodeFalling/hexo-asset-image --save
+```
+存放图片的目录名与文章名保持一致，例如
+```
+MacGesture2-Publish
+├── apppicker.jpg
+├── logo.jpg
+└── rules.jpg
+MacGesture2-Publish.md
+```
+使用 `![logo](logo.jpg)`就可以插入图片。
+
+#### 添加评论功能
+- 在[来必力官网](https://livere.com)注册一个账号，选择免费的city版本安装。 
+- 复制其中的uid字段。
+- 打开主题配置文件，定位到livere_uid字段，粘贴上刚刚复制的uid。
+
+#### 设置侧边栏社交
+编辑主题配置文件，定位到字段`social`，然后添加社交站点名称与地址即可。
+```
+# Social links
+social:
+  GitHub: https://github.com/crystalww || github
+  ...
+```
+
+编辑主题配置文件，在`social_icons`字段下添加社交站点名称（注意大小写）与图标。
+```
+social_icons:
+  enable: true
+  icons_only: false
+  transition: false
+  GitHub: github
+  Twitter: twitter
+  Weibo: weibo
+  Linkedin: linkedin
+```
+图标名称可以参考：http://fontawesome.io/cheatsheet/。
 
 ----
 
