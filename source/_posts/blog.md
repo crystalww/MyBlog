@@ -234,6 +234,7 @@ MacGesture2-Publish.md
 - 在[来必力官网](https://livere.com)注册一个账号，选择免费的city版本安装。 
 - 复制其中的uid字段。
 - 打开主题配置文件，定位到livere_uid字段，粘贴上刚刚复制的uid。
+- 修改`source/tags/index.md`
 
 #### 设置侧边栏社交
 编辑主题配置文件，定位到字段`social`，然后添加社交站点名称与地址即可。
