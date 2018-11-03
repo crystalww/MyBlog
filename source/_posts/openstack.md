@@ -6,6 +6,7 @@ categories:
 tags:
 - openstack
 - kolla
+- centos
 ---
 ## 实验环境
 最近在折腾kolla部署容器化的openstack，遇到的坑实在是太多了，在虚拟机中把可能遇到的问题都查了一遍才敢部署到物理机上。但还是没搞明白为什么虚拟机中virt_type只能为qemu才可以创建instance。有兴趣的建议先在VMware Workstation中尝试<!-- more -->，处理器开启`虚拟化Intel VT-x/EPT`或`AMD-V/RVI(V)`，所有操作在root下进行。虚拟机配置如下：
@@ -37,6 +38,7 @@ index-url = https://pypi.tuna.tsinghua.edu.cn/simple
 ## 准备工作
 基本是按照[OpenStack Docs的Quick Start](https://docs.openstack.org/kolla-ansible/latest/user/quickstart.html)进行的（For development）。首先修改/etc/hostname和/etc/hosts（部署用到的每台主机都要改）。
 
+在deploy主机上执行以下命令：
 ```
 # 安装pip并更新到最新
 yum install -y epel-release
@@ -57,9 +59,7 @@ pip install -U ansible
 host_key_checking=False
 pipelining=True
 forks=100
-```
 
-```
 # 安装Kolla-ansible
 git clone https://github.com/openstack/kolla -b stable/rocky
 git clone https://github.com/openstack/kolla-ansible -b stable/rocky
@@ -97,67 +97,7 @@ localhost       ansible_connection=local
 [deployment]
 localhost       ansible_connection=local
 ```
-检查配置文件信息是否正确
-```
-ansible -i multinode all -m ping
-```
-生成随机密码，密码存放于`/etc/kolla/passwords.yml`中。修改此文件中`keystone_admin_password`字段密码为`admin`。
-```
-./kolla-ansible/tools/generate_passwords.py
-```
-修改/etc/kolla/globals.yml
-```
-kolla_base_distro: "centos"
-kolla_install_type: "source"
-openstack_release: "rocky"
-openstack_release: "master"
-# 内网
-network_interface: "eth0"
-# 外网
-neutron_external_interface: "eth1"
-# 与内网网卡在同一子网中，且ip未被占用
-kolla_internal_vip_address: "10.1.0.250"
-nova_console: "spice"
-enable_horizon: "yes"
-# 如果是虚拟机，只能用qemu代替kvm，否则实例启动会卡在：Booting from Hard Disk...
-nova_compute_virt_type: "kvm"
-```
-
-## 部署
-```
-# Bootstrap servers with kolla deploy dependencies
-./kolla-ansible/tools/kolla-ansible -i multinode bootstrap-servers
-
-# 对主机进行部署前检查（kolla_internal_vip_address如果被占用会失败）
-./kolla-ansible/tools/kolla-ansible -i multinode prechecks
-
-# 进行openstack部署
-./kolla-ansible/tools/kolla-ansible -i multinode deploy
-
-# 如果部署失败，销毁失败的部署
-./kolla-ansible/tools/kolla-ansible -i <<inventory-file>> destroy
-```
-部署成功后输入虚拟ip地址即可进入dashboard。
-
-**注意：**
-kolla-ansible方式安装的openstack访问API（endpoint）与手动安装的不一样，在用openstack4j认证时获取不到信息，需要自己修改endpoint。下面操作在deploy上面进行：
-```
-# Install basic OpenStack CLI clients:
-pip install python-openstackclient python-glanceclient python-neutronclient
-
-# generate an openrc file
-cd kolla-ansible/tools
-./kolla-ansible post-deploy
-. /etc/kolla/admin-openrc.sh
-
-# 查看及修改端点信息
-[root@deploy tools]# openstack endpoint list
-[root@deploy tools]# openstack endpoint --help
-[root@deploy tools]# openstack endpoint set --help
-```
-
-## 使用两台虚拟机
-一台虚拟机上写配置文件（deploy），给另一台虚拟机部署openstack环境。修改mutinode文件：
+如果是多台机器，例如一台虚拟机上写配置文件（deploy），给另一台虚拟机部署openstack环境。修改mutinode文件：
 ```
 [control]
 # These hostname must be resolvable from your deployment host
@@ -184,10 +124,107 @@ localhost       ansible_connection=local ansible_become=true
 docker_registry: "ip:port"
 ```
 
+检查配置文件信息是否正确
+```
+ansible -i multinode all -m ping
+```
+
+生成随机密码，密码存放于`/etc/kolla/passwords.yml`中。修改此文件中`keystone_admin_password`字段密码为`admin`。
+```
+./kolla-ansible/tools/generate_passwords.py
+```
+
+修改/etc/kolla/globals.yml
+```
+kolla_base_distro: "centos"
+kolla_install_type: "source"
+openstack_release: "rocky"
+openstack_release: "master"
+# 内网
+network_interface: "eth0"
+# 外网
+neutron_external_interface: "eth1"
+# 与内网网卡在同一子网中，且ip未被占用
+kolla_internal_vip_address: "10.1.0.250"
+nova_console: "spice"
+enable_horizon: "yes"
+# 如果是虚拟机，只能用qemu代替kvm，否则实例启动会卡在：Booting from Hard Disk...
+nova_compute_virt_type: "kvm"
+```
+
+修改部署openstack机器上/etc/docker/daemon.json，并重启docker
+```
+{
+  "registry-mirrors": ["https://registry.docker-cn.com"]
+}
+```
+
+## 部署
+```
+# Bootstrap servers with kolla deploy dependencies
+./kolla-ansible/tools/kolla-ansible -i multinode bootstrap-servers
+
+# 对主机进行部署前检查（kolla_internal_vip_address如果被占用会失败）
+./kolla-ansible/tools/kolla-ansible -i multinode prechecks
+
+# 进行openstack部署
+./kolla-ansible/tools/kolla-ansible -i multinode deploy
+
+# 如果部署失败，销毁失败的部署
+./kolla-ansible/tools/kolla-ansible -i <<inventory-file>> destroy
+```
+部署成功后输入虚拟ip地址即可进入dashboard。如果需要访问外部网络，
+```
+供应商类型：Flat
+物理网络：physnet1 （/etc/kolla/neutron-server/ml2_conf.ini中flat_networks字段值）
+添加内部接口（子网网关）
+```
+
+开启多域支持，修改/etc/kolla/horizon/local_settings，重启horizon容器。
+```
+OPENSTACK_KEYSTONE_MULTIDOMAIN_SUPPORT = True
+```
+VMWare虚拟机迁移到openstack：将vmdk转换成qcow2格式的镜像，再上传即可用来创建实例
+```
+qemu-img convert -f vmdk -O qcow2 Metasploitable.vmdk Metasploitable.img
+qemu-img info Metasploitable.img
+```
+
+**注意：**
+kolla-ansible方式安装的openstack（[P版本及以后](https://github.com/openstack/kolla-ansible/blob/master/releasenotes/notes/keystone-versionless-endpoint-ae9274c81927d949.yaml)）访问API（endpoint）与之前版本不一样，在用openstack4j(V3.1.0)认证时获取不到信息，需要自己修改endpoint。下面操作在deploy上面进行：
+```
+# Install basic OpenStack CLI clients:
+pip install python-openstackclient python-glanceclient python-neutronclient
+
+# generate an openrc file
+cd kolla-ansible/tools
+./kolla-ansible post-deploy
+. /etc/kolla/admin-openrc.sh
+
+# 查看及修改端点信息
+[root@deploy tools]# openstack endpoint list
+[root@deploy tools]# openstack endpoint --help
+[root@deploy tools]# openstack endpoint set --help
+
+# 查看实例
+[root@deploy ~]# nova list
+
+# 查看hypervisor类型
+[root@deploy ~]# openstack hypervisor list
+
+# 查看服务列表
+[root@deploy ~]# openstack service list
+[root@deploy ~]# nova service-list
+[root@deploy ~]# openstack compute service list 
+```
+
 ## 报错信息整理
 部署过程报错：
 - cannot uninstall xxx
 >查看安装什么东西导致出错，然后pip install XXXX --ignore-installed xxx
+
+- TASK [haproxy : Waiting for virtual IP to appear] 
+>编辑/etc/kolla/globals.yml，重新设置keepalived_virtual_router_id的值(Must be free in the network)。
 
 - waiting for nova-compute service up...
 >kolla-ansible版本要与openstack_release版本（docker hub中查看tag）一致。pip安装的kolla-ansible（pip show kolla-ansible）对应最新的openstack稳定版（现在是rocky）
@@ -197,16 +234,59 @@ docker_registry: "ip:port"
 
 创建实例报错：
 - no valid hosts...
->可能是virt_type=kvm导致的，配置文件/etc/kolla/nova-compute/nova.conf中virt_type改为qemu，重启nova_compute容器
-
-- MessagingTimeout: Timed out waiting for a reply to message ID...
->docker restart $(docker ps -aq)
-
-如果需要访问外部网络，
 ```
-供应商类型：Flat
-物理网络：physnet1 （/etc/kolla/neutron-server/ml2_conf.ini中flat_networks字段值）
-添加内部接口（子网网关）
+1. 可能是virt_type=kvm导致的，配置文件/etc/kolla/nova-compute/nova.conf中virt_type改为qemu，重启nova_compute容器
+[libvirt]
+connection_uri = qemu+tcp://192.168.89.149/system
+virt_type = qemu
+
+2. 也可能是其他原因
+- nova-compute日志提示
+ERROR nova.compute.manager [instance: 3af11e19-b4f8-452a-8f3d-3d659be050bd] libvirtError: Did not receive a reply. Possible causes include: the remote application did not send a reply, the message bus security policy blocked the reply, the reply timeout expired, or the network connection was broken.
+- libvirtd日志提示
+2018-11-02 01:14:26.017+0000: 43848: error : virDBusCall:1570 : error from service: CanSuspend: Did not receive a reply. Possible causes include: the remote application did not send a reply, the message bus security policy blocked the reply, the reply timeout expired, or the network connection was broken.
+
+### 解决办法
+检查节点状态，发现selinux开启了，关闭selinux即可
+查看selinux状态：sestatus
+临时关闭：setenforce 0
+永久关闭：改配置文件/etc/selinux/config,将其中SELINUX设置为disabled。
+```
+
+- MessagingTimeout: Timed out waiting for a reply to message ID... 
+>查看nova_compute的日志，如果需要重启容器：docker restart $(docker ps -aq)
+
+## kolla部署OpenStack Ocata版本注意事项
+- 确保selinux关闭，否则部署完成实例创建失败
+- 修改kolla-ansible/ansible/roles/haproxy/tasks/precheck.yml中的`always_run: True`为`run_once: true`，否则报错：
+```
+TASK [haproxy : include] *************************************************************************************
+fatal: [vmc]: FAILED! => {"reason": "'always_run' is not a valid attribute for a Task\n\nThe error appears to have been in '/root/kolla-ansible/ansible/roles/haproxy/tasks/precheck.yml': line 9, column 3, but may\nbe elsewhere in the file depending on the exact syntax problem.\n\nThe offending line appears to be:\n\n\n- name: Clearing temp kolla_keepalived_running file\n  ^ here\n\nThis error can be suppressed as a warning using the \"invalid_task_attribute_failed\" configuration"}
+```
+- 确保部署openstack的机器上libvirtd停止运行`service libvirtd status`，`service libvirtd stop`，否则报错：
+```
+TASK [nova : Checking that libvirt is not running] ***********************************************************
+fatal: [vmc]: FAILED! => {"changed": false, "failed_when_result": true, "stat": {"atime": 1541046790.1479998, "attr_flags": "", "attributes": [], "block_size": 4096, "blocks": 0, "charset": "binary", "ctime": 1541046790.1479998, "dev": 19, "device_type": 0, "executable": true, "exists": true, "gid": 0, "gr_name": "root", "inode": 37921, "isblk": false, "ischr": false, "isdir": false, "isfifo": false, "isgid": false, "islnk": false, "isreg": false, "issock": true, "isuid": false, "mimetype": "inode/socket", "mode": "0777", "mtime": 1541046790.1479998, "nlink": 1, "path": "/var/run/libvirt/libvirt-sock", "pw_name": "root", "readable": true, "rgrp": true, "roth": true, "rusr": true, "size": 0, "uid": 0, "version": null, "wgrp": true, "woth": true, "writeable": true, "wusr": true, "xgrp": true, "xoth": true, "xusr": true}}
+        to retry, use: --limit @/root/kolla-ansible/ansible/site.retry
+```
+- 修改kolla-ansible/ansible/roles/mariadb/tasks/lookup_cluster.yml文件，删除所有的`always_run: True`，否则报错：
+```
+TASK [mariadb : include] *************************************************************************************
+fatal: [vmc]: FAILED! => {"reason": "'always_run' is not a valid attribute for a Task\n\nThe error appears to have been in '/root/kolla-ansible/ansible/roles/mariadb/tasks/lookup_cluster.yml': line 2, column 3, but may\nbe elsewhere in the file depending on the exact syntax problem.\n\nThe offending line appears to be:\n\n---\n- name: Cleaning up temp file on localhost\n  ^ here\n\nThis error can be suppressed as a warning using the \"invalid_task_attribute_failed\" configuration"}
+        to retry, use: --limit @/root/kolla-ansible/ansible/site.retry
+```
+- 在虚拟机上部署过程中会可能网卡出现问题（ping不通）导致部署失败，重启网卡即可
+```
+# network
+service network restart
+
+# ifdown/ifup
+ifdown eth0
+ifup eth0
+
+# ifconfig
+ifconfig eth0 down
+ifconfig eth0 up
 ```
 
 ## 参考资料
@@ -214,3 +294,4 @@ docker_registry: "ip:port"
 2. [Docker容器化部署运维OpenStack和Ceph](https://cloud.tencent.com/developer/article/1073885)
 3. [CentOS7单节点部署OpenStack-Pike(使用kolla-ansible)](https://blog.csdn.net/persistvonyao/article/details/80229602)
 4. [Openstack之ubuntu16使用kolla部署实验](http://blog.51cto.com/yuweibing/1976882)
+5. [kolla-ansible安装openstack(Ocata)](https://www.cnblogs.com/silvermagic/p/7665975.html)
