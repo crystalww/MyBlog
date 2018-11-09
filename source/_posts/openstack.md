@@ -173,21 +173,29 @@ nova_compute_virt_type: "kvm"
 # 如果部署失败，销毁失败的部署
 ./kolla-ansible/tools/kolla-ansible -i <<inventory-file>> destroy
 ```
-部署成功后输入虚拟ip地址即可进入dashboard。如果需要访问外部网络，
+部署成功后输入虚拟ip地址即可进入dashboard。
+- 如果需要访问外部网络，
 ```
 供应商类型：Flat
 物理网络：physnet1 （/etc/kolla/neutron-server/ml2_conf.ini中flat_networks字段值）
 添加内部接口（子网网关）
 ```
-
-开启多域支持，修改/etc/kolla/horizon/local_settings，重启horizon容器。
+- 开启多域支持，修改/etc/kolla/horizon/local_settings，重启horizon容器。
 ```
 OPENSTACK_KEYSTONE_MULTIDOMAIN_SUPPORT = True
 ```
-VMWare虚拟机迁移到openstack：将vmdk转换成qcow2格式的镜像，再上传即可用来创建实例
+- VMWare虚拟机迁移到openstack：将vmdk转换成qcow2格式的镜像，再上传即可用来创建实例
 ```
 qemu-img convert -f vmdk -O qcow2 Metasploitable.vmdk Metasploitable.img
 qemu-img info Metasploitable.img
+```
+- Horizon登陆超过一小时需要重新登录，改为24小时
+修改`/etc/kolla/horizon/local_settings`，添加`SESSION_TIMEOUT = 86400`
+修改`/etc/kolla/keystone/keystone.conf`如下，重启horizon、keystone容器
+```
+[token]
+...
+expiration = 86400
 ```
 
 **注意：**
@@ -295,3 +303,4 @@ ifconfig eth0 up
 3. [CentOS7单节点部署OpenStack-Pike(使用kolla-ansible)](https://blog.csdn.net/persistvonyao/article/details/80229602)
 4. [Openstack之ubuntu16使用kolla部署实验](http://blog.51cto.com/yuweibing/1976882)
 5. [kolla-ansible安装openstack(Ocata)](https://www.cnblogs.com/silvermagic/p/7665975.html)
+6. [Timeout of Horizon web interface when idle](https://openstack.nimeyo.com/101821/openstack-timeout-of-horizon-web-interface-when-idle)
