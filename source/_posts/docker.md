@@ -17,6 +17,8 @@ tags:
 `yum -y install docker`
 - 启动 Docker 后台服务
 `service docker start`
+- 设置开机自启动
+`systemctl enable docker`
 - 测试运行 hello-world
 由于本地没有hello-world这个镜像，所以会下载一个hello-world的镜像，并在容器内运行。
 `docker run hello-world`

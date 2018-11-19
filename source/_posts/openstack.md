@@ -19,26 +19,37 @@ tags:
 网卡2：桥接模式
 ```
 
-### 修改CentOS默认yum源
-- 备份默认yum源
+修改CentOS默认yum源
+>1 备份默认yum源
 `mv /etc/yum.repos.d/CentOS-Base.repo /etc/yum.repos.d/CentOS-Base.repo.backup`
-- 下载阿里云的yum源配置文件到/etc/yum.repos.d/
+>2 下载阿里云的yum源配置文件到/etc/yum.repos.d/
 `wget -O /etc/yum.repos.d/CentOS-Base.repo http://mirrors.aliyun.com/repo/Centos-7.repo`
-- 本地缓存服务器上的软件包信息
+>3 本地缓存服务器上的软件包信息
 `yum makecache`
-- 更新
+>4 更新
 `yum -y update`
 
-### 修改 ~/.pip/pip.conf（没有就创建一个）
+修改 ~/.pip/pip.conf（没有就创建一个）
 ```
 [global]
 index-url = https://pypi.tuna.tsinghua.edu.cn/simple
 ```
 
-## 准备工作
-基本是按照[OpenStack Docs的Quick Start](https://docs.openstack.org/kolla-ansible/latest/user/quickstart.html)进行的（For development）。首先修改/etc/hostname和/etc/hosts（部署用到的每台主机都要改）。
+修改/etc/hostname和/etc/hosts
+>hosts中写用到的主机的ip和hostname，部署用到的每台主机都要改。
 
-在deploy主机上执行以下命令：
+关闭selinux
+>临时关闭：setenforce 0
+永久关闭：改配置文件/etc/selinux/config,将其中SELINUX设置为disabled。
+
+关闭防火墙
+```
+systemctl status firewalld
+systemctl stop firewalld
+systemctl disable firewalld
+```
+---
+以上步骤完成后就可以按照[OpenStack Docs的Quick Start](https://docs.openstack.org/kolla-ansible/latest/user/quickstart.html)（For development）部分进行操作了。如果是多节点部署，在deploy主机上执行以下命令：
 ```
 # 安装pip并更新到最新
 yum install -y epel-release
@@ -75,9 +86,9 @@ cp -r kolla-ansible/etc/kolla/* /etc/kolla
 # 复制（all-in-one、multinode）到当前目录下
 cp kolla-ansible/ansible/inventory/* .
 ```
-
+---
 ## 修改配置信息
-修改all-in-one如下：
+单节点部署修改all-in-one文件：
 ```
 [control]
 localhost       ansible_connection=local
@@ -97,7 +108,7 @@ localhost       ansible_connection=local
 [deployment]
 localhost       ansible_connection=local
 ```
-如果是多台机器，例如一台虚拟机上写配置文件（deploy），给另一台虚拟机部署openstack环境。修改mutinode文件：
+多节点部署修改mutinode文件：
 ```
 [control]
 # These hostname must be resolvable from your deployment host
@@ -119,77 +130,110 @@ control2 ansible_user=root ansible_password=123 ansible_become=true
 localhost       ansible_connection=local ansible_become=true
 ```
 
-如果有私有docker仓库，部署过程会更快，需要修改/etc/kolla/global.yml
-```
-docker_registry: "ip:port"
-```
-
 检查配置文件信息是否正确
-```
-ansible -i multinode all -m ping
-```
+>ansible -i multinode all -m ping
 
-生成随机密码，密码存放于`/etc/kolla/passwords.yml`中。修改此文件中`keystone_admin_password`字段密码为`admin`。
-```
-./kolla-ansible/tools/generate_passwords.py
-```
+生成随机密码，密码存放于`/etc/kolla/passwords.yml`中。修改此文件中`keystone_admin_password`字段值为`admin`。
+>./kolla-ansible/tools/generate_passwords.py
 
 修改/etc/kolla/globals.yml
 ```
 kolla_base_distro: "centos"
 kolla_install_type: "source"
-openstack_release: "rocky"
-openstack_release: "master"
-# 内网
-network_interface: "eth0"
-# 外网
-neutron_external_interface: "eth1"
-# 与内网网卡在同一子网中，且ip未被占用
-kolla_internal_vip_address: "10.1.0.250"
+openstack_release: "rocky"       # openstack_release版本与你clone的kolla和kolla-ansible的版本对应
+network_interface: "eth0"        # 内网
+neutron_external_interface: "eth1"  # 外网
+kolla_internal_vip_address: "内网ip"   # 确保ip未被占用，这也是用于访问horizon的ip
 nova_console: "spice"
 enable_horizon: "yes"
-# 如果是虚拟机，只能用qemu代替kvm，否则实例启动会卡在：Booting from Hard Disk...
-nova_compute_virt_type: "kvm"
+nova_compute_virt_type: "kvm"  # 如果是虚拟机，只能用qemu代替kvm，否则实例启动会卡在：Booting from Hard Disk...
+docker_registry: "ip:port"     # 如果有私有docker仓库，部署过程会更快
+
+enable_cinder: "yes"           # 块存储，这里还不怎么懂！！！
 ```
 
-修改部署openstack机器上/etc/docker/daemon.json，并重启docker
+在下面Bootstrap servers步骤后，修改被部署openstack机器上/etc/docker/daemon.json，并重启docker
 ```
 {
-  "registry-mirrors": ["https://registry.docker-cn.com"]
+  "registry-mirrors": ["https://registry.docker-cn.com"],
+  "insecure-registries": ["192.168.89.149:5000"]
 }
 ```
-
+---
 ## 部署
 ```
-# Bootstrap servers with kolla deploy dependencies
+# 1. Bootstrap servers with kolla deploy dependencies
 ./kolla-ansible/tools/kolla-ansible -i multinode bootstrap-servers
 
-# 对主机进行部署前检查（kolla_internal_vip_address如果被占用会失败）
+# 2. 对主机进行部署前检查（kolla_internal_vip_address如果被占用会失败）
 ./kolla-ansible/tools/kolla-ansible -i multinode prechecks
 
-# 进行openstack部署
+# 3. 进行openstack部署
 ./kolla-ansible/tools/kolla-ansible -i multinode deploy
 
-# 如果部署失败，销毁失败的部署
+# 4. 如果部署失败，销毁失败的部署
 ./kolla-ansible/tools/kolla-ansible -i <<inventory-file>> destroy
 ```
 部署成功后输入虚拟ip地址即可进入dashboard。
-- 如果需要访问外部网络，
+
+## 扩展节点
+如果增加了几台服务器用作计算节点或者存储节点，要怎么部署进去呢？
+- 进行部署操作的第一、二步，在此过程可能会卡在安装pip这里，进服务器手动安装`yum install -y python-pip`即可。
+- 然后进行upgrade而不是重新deploy
+`./kolla-ansible/tools/kolla-ansible -i multinode upgrade`
+
+---
+## kolla部署OpenStack Ocata版本注意事项
+- 安装完后需要在/etc/kolla/nova-compute/nova.conf中`[libvirt]`下添加`virt_type = qemu`。
+- 确保selinux关闭，否则部署完成实例创建失败
+- 修改kolla-ansible/ansible/roles/haproxy/tasks/precheck.yml中的`always_run: True`为`run_once: true`，否则报错：
+```
+TASK [haproxy : include] *************************************************************************************
+fatal: [vmc]: FAILED! => {"reason": "'always_run' is not a valid attribute for a Task\n\nThe error appears to have been in '/root/kolla-ansible/ansible/roles/haproxy/tasks/precheck.yml': line 9, column 3, but may\nbe elsewhere in the file depending on the exact syntax problem.\n\nThe offending line appears to be:\n\n\n- name: Clearing temp kolla_keepalived_running file\n  ^ here\n\nThis error can be suppressed as a warning using the \"invalid_task_attribute_failed\" configuration"}
+```
+- 确保部署openstack的机器上libvirtd停止运行`service libvirtd status`，`service libvirtd stop`，否则报错：
+```
+TASK [nova : Checking that libvirt is not running] ***********************************************************
+fatal: [vmc]: FAILED! => {"changed": false, "failed_when_result": true, "stat": {"atime": 1541046790.1479998, "attr_flags": "", "attributes": [], "block_size": 4096, "blocks": 0, "charset": "binary", "ctime": 1541046790.1479998, "dev": 19, "device_type": 0, "executable": true, "exists": true, "gid": 0, "gr_name": "root", "inode": 37921, "isblk": false, "ischr": false, "isdir": false, "isfifo": false, "isgid": false, "islnk": false, "isreg": false, "issock": true, "isuid": false, "mimetype": "inode/socket", "mode": "0777", "mtime": 1541046790.1479998, "nlink": 1, "path": "/var/run/libvirt/libvirt-sock", "pw_name": "root", "readable": true, "rgrp": true, "roth": true, "rusr": true, "size": 0, "uid": 0, "version": null, "wgrp": true, "woth": true, "writeable": true, "wusr": true, "xgrp": true, "xoth": true, "xusr": true}}
+        to retry, use: --limit @/root/kolla-ansible/ansible/site.retry
+```
+- 修改kolla-ansible/ansible/roles/mariadb/tasks/lookup_cluster.yml文件，删除所有的`always_run: True`，否则报错：
+```
+TASK [mariadb : include] *************************************************************************************
+fatal: [vmc]: FAILED! => {"reason": "'always_run' is not a valid attribute for a Task\n\nThe error appears to have been in '/root/kolla-ansible/ansible/roles/mariadb/tasks/lookup_cluster.yml': line 2, column 3, but may\nbe elsewhere in the file depending on the exact syntax problem.\n\nThe offending line appears to be:\n\n---\n- name: Cleaning up temp file on localhost\n  ^ here\n\nThis error can be suppressed as a warning using the \"invalid_task_attribute_failed\" configuration"}
+        to retry, use: --limit @/root/kolla-ansible/ansible/site.retry
+```
+- 在虚拟机上部署过程中会可能网卡出现问题（ping不通）导致部署失败，重启网卡即可
+```
+# network
+service network restart
+
+# ifdown/ifup
+ifdown eth0
+ifup eth0
+
+# ifconfig
+ifconfig eth0 down
+ifconfig eth0 up
+```
+---
+## 调整
+>如果需要访问外部网络，
 ```
 供应商类型：Flat
 物理网络：physnet1 （/etc/kolla/neutron-server/ml2_conf.ini中flat_networks字段值）
 添加内部接口（子网网关）
 ```
-- 开启多域支持，修改/etc/kolla/horizon/local_settings，重启horizon容器。
+>开启多域支持，修改/etc/kolla/horizon/local_settings，重启horizon容器。
 ```
 OPENSTACK_KEYSTONE_MULTIDOMAIN_SUPPORT = True
 ```
-- VMWare虚拟机迁移到openstack：将vmdk转换成qcow2格式的镜像，再上传即可用来创建实例
+>VMWare虚拟机迁移到openstack：将vmdk转换成qcow2格式的镜像，再上传即可用来创建实例
 ```
 qemu-img convert -f vmdk -O qcow2 Metasploitable.vmdk Metasploitable.img
 qemu-img info Metasploitable.img
 ```
-- Horizon登陆超过一小时需要重新登录，改为24小时
+>Horizon登陆超过一小时需要重新登录，改为24小时
 修改`/etc/kolla/horizon/local_settings`，添加`SESSION_TIMEOUT = 86400`
 修改`/etc/kolla/keystone/keystone.conf`如下，重启horizon、keystone容器
 ```
@@ -225,22 +269,23 @@ cd kolla-ansible/tools
 [root@deploy ~]# nova service-list
 [root@deploy ~]# openstack compute service list 
 ```
-
+---
 ## 报错信息整理
-部署过程报错：
-- cannot uninstall xxx
->查看安装什么东西导致出错，然后pip install XXXX --ignore-installed xxx
+**部署过程报错：**
+- 安装kolla依赖时报错：cannot uninstall xxx
+>在命令后加上`--ignore-installed xxx`再执行一次
 
 - TASK [haproxy : Waiting for virtual IP to appear] 
 >编辑/etc/kolla/globals.yml，重新设置keepalived_virtual_router_id的值(Must be free in the network)。
 
 - waiting for nova-compute service up...
->kolla-ansible版本要与openstack_release版本（docker hub中查看tag）一致。pip安装的kolla-ansible（pip show kolla-ansible）对应最新的openstack稳定版（现在是rocky）
+>kolla-ansible版本要与openstack_release版本（docker hub中查看tag）一致。
+pip安装的kolla-ansible（pip show kolla-ansible）、git clone的master版都对应最新的openstack稳定版（现在是rocky）
 
 - neutron容器启动报错：超时
 >kolla部署过程会断开外网网卡导致下载不到docker镜像。提前下载镜像自建docker仓库或者network_interface对应的网卡能上网就行
 
-创建实例报错：
+**创建实例报错：**
 - no valid hosts...
 ```
 1. 可能是virt_type=kvm导致的，配置文件/etc/kolla/nova-compute/nova.conf中virt_type改为qemu，重启nova_compute容器
@@ -264,39 +309,16 @@ ERROR nova.compute.manager [instance: 3af11e19-b4f8-452a-8f3d-3d659be050bd] libv
 - MessagingTimeout: Timed out waiting for a reply to message ID... 
 >查看nova_compute的日志，如果需要重启容器：docker restart $(docker ps -aq)
 
-## kolla部署OpenStack Ocata版本注意事项
-- 确保selinux关闭，否则部署完成实例创建失败
-- 修改kolla-ansible/ansible/roles/haproxy/tasks/precheck.yml中的`always_run: True`为`run_once: true`，否则报错：
+- CentOS 7 packstack - Instance fails, Error: Volume did not finish being created
 ```
-TASK [haproxy : include] *************************************************************************************
-fatal: [vmc]: FAILED! => {"reason": "'always_run' is not a valid attribute for a Task\n\nThe error appears to have been in '/root/kolla-ansible/ansible/roles/haproxy/tasks/precheck.yml': line 9, column 3, but may\nbe elsewhere in the file depending on the exact syntax problem.\n\nThe offending line appears to be:\n\n\n- name: Clearing temp kolla_keepalived_running file\n  ^ here\n\nThis error can be suppressed as a warning using the \"invalid_task_attribute_failed\" configuration"}
-```
-- 确保部署openstack的机器上libvirtd停止运行`service libvirtd status`，`service libvirtd stop`，否则报错：
-```
-TASK [nova : Checking that libvirt is not running] ***********************************************************
-fatal: [vmc]: FAILED! => {"changed": false, "failed_when_result": true, "stat": {"atime": 1541046790.1479998, "attr_flags": "", "attributes": [], "block_size": 4096, "blocks": 0, "charset": "binary", "ctime": 1541046790.1479998, "dev": 19, "device_type": 0, "executable": true, "exists": true, "gid": 0, "gr_name": "root", "inode": 37921, "isblk": false, "ischr": false, "isdir": false, "isfifo": false, "isgid": false, "islnk": false, "isreg": false, "issock": true, "isuid": false, "mimetype": "inode/socket", "mode": "0777", "mtime": 1541046790.1479998, "nlink": 1, "path": "/var/run/libvirt/libvirt-sock", "pw_name": "root", "readable": true, "rgrp": true, "roth": true, "rusr": true, "size": 0, "uid": 0, "version": null, "wgrp": true, "woth": true, "writeable": true, "wusr": true, "xgrp": true, "xoth": true, "xusr": true}}
-        to retry, use: --limit @/root/kolla-ansible/ansible/site.retry
-```
-- 修改kolla-ansible/ansible/roles/mariadb/tasks/lookup_cluster.yml文件，删除所有的`always_run: True`，否则报错：
-```
-TASK [mariadb : include] *************************************************************************************
-fatal: [vmc]: FAILED! => {"reason": "'always_run' is not a valid attribute for a Task\n\nThe error appears to have been in '/root/kolla-ansible/ansible/roles/mariadb/tasks/lookup_cluster.yml': line 2, column 3, but may\nbe elsewhere in the file depending on the exact syntax problem.\n\nThe offending line appears to be:\n\n---\n- name: Cleaning up temp file on localhost\n  ^ here\n\nThis error can be suppressed as a warning using the \"invalid_task_attribute_failed\" configuration"}
-        to retry, use: --limit @/root/kolla-ansible/ansible/site.retry
-```
-- 在虚拟机上部署过程中会可能网卡出现问题（ping不通）导致部署失败，重启网卡即可
-```
-# network
-service network restart
+(nova-compute)[root@m_controller /]# cat /var/log/kolla/nova/nova-compute.log
 
-# ifdown/ifup
-ifdown eth0
-ifup eth0
-
-# ifconfig
-ifconfig eth0 down
-ifconfig eth0 up
+ERROR nova.compute.manager [instance: 3c122d5f-bd92-45c1-ae11-e6ca743a83b1] BuildAbortException: Build of instance 3c122d5f-bd92-45c1-ae11-e6ca743a83b1 aborted: Volume 4a7a123e-8d90-4365-bb11-24688cb3ad3e did not finish being created even after we waited 0 seconds or 1 attempts. And its status is error.
 ```
+  查看nova_compute的日志，应该是卷的原因，可能是[卷的存储不够](https://ask.openstack.org/en/question/111367/centos-7-packstack-instance-fails-error-volume-did-not-finish-being-created/)，创建实例时默认开启卷，关掉就好了
+![cinder](cinder.png)
 
+---
 ## 参考资料
 1. [OpenStack Docs: Quick Start](https://docs.openstack.org/kolla-ansible/latest/user/quickstart.html#kolla-globals-yml)
 2. [Docker容器化部署运维OpenStack和Ceph](https://cloud.tencent.com/developer/article/1073885)
