@@ -23,7 +23,8 @@ tmpfs                     16G     0   16G   0% /sys/fs/cgroup
 tmpfs                    3.2G   12K  3.2G   1% /run/user/42
 ```
 2. 备份home分区文件
-`[root@centos ~]# tar cvf /tmp/home.tar /home | ls -lh /tmp`
+`[root@centos ~]# tar cvf /tmp/home.tar /home`
+**注意检查是否备份成功**
 3. 卸载/home目录
 终止使用/home文件系统的进程，再卸载。
 ```

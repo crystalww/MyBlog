@@ -231,10 +231,41 @@ MacGesture2-Publish.md
 使用 `![logo](logo.jpg)`就可以插入图片。
 
 #### 添加评论功能
+**1.使用来必力评论系统**
 - 在[来必力官网](https://livere.com)注册一个账号，选择免费的city版本安装。 
 - 复制其中的uid字段。
 - 打开主题配置文件，定位到livere_uid字段，粘贴上刚刚复制的uid。
 - 修改`source/tags/index.md`
+加入`comments: false`，否则标签和分类里面也会加载评论
+
+**2.使用valine**（可以匿名评论）
+- 注册[LeanCloud](https://leancloud.cn/dashboard/login.html#/signup)账号
+- 创建应用：填写应用名、勾选`开发版`
+- 进入设置页面查看App ID和App Key
+- 在leancloud存储中创建Class，命名为Counter。修改next/_config.yml中leancloud_visitors，配置阅读统计：
+```
+leancloud_visitors:
+  enable: true 设置为true 默认为false
+  app_id:  #你的App ID
+  app_key:  #你的App Key
+  Dependencies:  https://github.com/theme-next/hexo-leancloud-counter-security #设置依赖
+  security: true #没有hexo-leancloud-counter-security插件，请将security设置为false
+  betterPerformance: true #更好的性能
+```
+- 在leancloud存储中创建Class，命名为Comment。修改next/_config.yml中valine部分，配置评论设置：
+```
+valine:
+  enable: true # 设置为true，默认为false
+  appid:  # 将应用key的App ID设置在这里
+  appkey: # 将应用key的App Key设置在这里
+  notify: true# 邮箱通知 , https://github.com/xCss/Valine/wiki，默认为false
+  verify: true# 验证码 默认为false
+  placeholder: Just go go ^_^ # 初始化评论显示
+  avatar: wavatar # 头像风格，默认为mm，可进入网址：https://valine.js.org/visitor.html查看头像设置
+  guest_info: nick,mail,link # 自定义评论标题
+  pageSize: 10 # 分页大小，10页就自动分页
+  visitor: true # 是否允许游客评论 ，进入官网查看设置：https://valine.js.org/visitor.html
+```
 
 #### 设置侧边栏社交
 编辑主题配置文件，定位到字段`social`，然后添加社交站点名称与地址即可。
