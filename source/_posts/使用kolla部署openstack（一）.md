@@ -150,6 +150,21 @@ nova_compute_virt_type: "kvm"  # 如果是虚拟机，只能用qemu代替kvm，�
 docker_registry: "ip:port"     # 如果有私有docker仓库，部署过程会更快
 
 enable_cinder: "yes"           # 块存储，这里还不怎么懂！！！
+enable_cinder_backend_lvm: "yes"
+
+# 如果要安装ceilometer、aodh、gnocchi，需要修改下面这部分
+enable_aodh: "yes"
+enable_ceilometer: "yes"
+enable_ceph: "no"
+enable_gnocchi: "yes"
+ceilometer_database_type: "gnocchi"
+ceilometer_event_type: "gnocchi"
+gnocchi_backend_storage: "{{ 'ceph' if enable_ceph|bool else 'file' }}"
+
+# 如果要安装mistral，需要修改下面这部分
+enable_horizon_mistral: "{{ enable_mistral | bool }}"
+enable_mistral: "yes"
+
 ```
 
 在下面Bootstrap servers步骤后，修改被部署openstack机器上/etc/docker/daemon.json，并重启docker
@@ -179,7 +194,7 @@ enable_cinder: "yes"           # 块存储，这里还不怎么懂！！！
 ## 扩展节点
 如果增加了几台服务器用作计算节点或者存储节点，要怎么部署进去呢？
 - 进行部署操作的第一、二步，在此过程可能会卡在安装pip这里，进服务器手动安装`yum install -y python-pip`即可。
-- 然后进行upgrade而不是重新deploy
+- 然后进行upgrade而不是重新deploy（验证：如果启动了虚拟机，upgrade没有用）
 `./kolla-ansible/tools/kolla-ansible -i multinode upgrade`
 
 ---
@@ -284,6 +299,17 @@ pip安装的kolla-ansible（pip show kolla-ansible）、git clone的master版都
 
 - neutron容器启动报错：超时
 >kolla部署过程会断开外网网卡导致下载不到docker镜像。提前下载镜像自建docker仓库或者network_interface对应的网卡能上网就行
+
+- iscsid容器启动不了，docker logs iscsid 显示为: Can not bind IPC socket 
+```
+计算节点或存储节点iscsid容器启动失败，因为物理主机上的iscsid服务占用了IPC socket
+
+解决方案:
+yum remove iscsi-initiator-utils
+或者
+$ sudo systemctl stop iscsid.socket iscsiuio.socket iscsid.service 
+$ sudo systemctl disable iscsid.socket iscsiuio.socket iscsid.service  
+```
 
 **创建实例报错：**
 - no valid hosts...
