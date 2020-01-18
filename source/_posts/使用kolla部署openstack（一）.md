@@ -167,7 +167,7 @@ enable_mistral: "yes"
 
 ```
 
-在下面Bootstrap servers步骤后，修改被部署openstack机器上/etc/docker/daemon.json，并重启docker
+**在下面Bootstrap servers步骤后**，修改被部署openstack机器上/etc/docker/daemon.json，并重启docker
 ```
 {
   "registry-mirrors": ["https://registry.docker-cn.com"],
@@ -199,7 +199,12 @@ enable_mistral: "yes"
 
 ---
 ## kolla部署OpenStack Ocata版本注意事项
-- 安装完后需要在/etc/kolla/nova-compute/nova.conf中`[libvirt]`下添加`virt_type = qemu`。
+- 安装完后需要在/etc/kolla/nova-compute/nova.conf中`[libvirt]`下添加：
+  ```
+  # 或者部署前在 /root/kolla-ansible/ansible/roles/nova/templates/nova.conf.j2 里修改？
+  virt_type = qemu
+  inject_password=True
+  ```
 - 确保selinux关闭，否则部署完成实例创建失败
 - 修改kolla-ansible/ansible/roles/haproxy/tasks/precheck.yml中的`always_run: True`为`run_once: true`，否则报错：
 ```
